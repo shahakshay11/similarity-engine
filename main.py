@@ -15,10 +15,16 @@ import heapq
 
 WEIGHT_MODEL_MAP = {'TF':0,'DF':1,'TF-IDF':2}
 
-USER_TXT_DESCRIPTOR_FILENAME = '../data/desctxt/devset_textTermsPerUser.txt'
-IMAGE_TXT_DESCRIPTOR_FILENAME = '../data/desctxt/devset_textTermsPerImage.txt'
-LOCATION_TXT_DESCRIPTOR_FILENAME = '../data/desctxt/devset_textTermsPerPOI.txt'
-IMAGE_PATH = '../data/descvis/img/'
+
+#DATA_PATH = "../data/"
+DATA_PATH = "../Testdata/devset/"
+
+
+USER_TXT_DESCRIPTOR_FILENAME = DATA_PATH + 'desctxt/devset_textTermsPerUser.txt'
+IMAGE_TXT_DESCRIPTOR_FILENAME = DATA_PATH + 'desctxt/devset_textTermsPerImage.txt'
+LOCATION_TXT_DESCRIPTOR_FILENAME = DATA_PATH + 'desctxt/devset_textTermsPerPOI.txt'
+#IMAGE_PATH = '../data/descvis/img/'
+IMAGE_PATH = '../Testdata/devset/descvis/img/'
 
 IMAGE_MODELS = ['CM','CM3X3','CN','CN3X3','CSD','GLRM','GLRM3X3','HOG','LBP','LBP3X3']
 
@@ -63,6 +69,7 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
 
         #Get the entity id and term_weights list from each entity
         entity_id = entity_obj[:term_index].strip()
+        #print("entity ID",entity_id)
         entity_term_weights_list = entity_obj[entity_obj.find('"'):].split(" ")
 
         if is_location_query:
@@ -70,6 +77,7 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
             for location_id,location_text in location_map.items():
                 if location_text.startswith(entity_id.split(" ")[0]):
                     entity_id = location_id
+                    #print("entity_id",entity_id)
                     break
         
         entity_ids.append(entity_id)
@@ -180,7 +188,7 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
         normalized_entity_term_vector = get_normalized_term_vector(updated_entity_term_vector)
 
         term_value_differences = get_vector_distances(normalized_given_entity_term_vector,normalized_entity_term_vector)
-        sorted(term_value_differences,key=itemgetter(1))
+        term_value_differences = sorted(term_value_differences,key=itemgetter(1))
 
         if len(term_value_differences) > 3:
             highest_contributors = [term_value_differences[0][0],term_value_differences[1][0],term_value_differences[2][0]]
@@ -189,7 +197,7 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
 
         entity_match_data.append((entity_id,similarity_score,highest_contributors))
 
-    sorted(entity_match_data,key=itemgetter(1))
+    entity_match_data = sorted(entity_match_data,key=itemgetter(1))
 
     return entity_match_data[0:k]
 
@@ -275,7 +283,7 @@ def get_similar_locations_given_model(location_datasets,input_location_dataset,i
     '''
 
     location_match_data = []
-    input_location_centroid_arry = get_centroid_of_location(input_location_dataset)
+    input_location_centroid_arry = get_centroid_of_location(input_location_dataset.iloc[:,1:])
 
     reverse_location_map = dict((value,key) for key,value in location_map.items())
 
@@ -283,24 +291,27 @@ def get_similar_locations_given_model(location_datasets,input_location_dataset,i
 
     for location_id,dataset in location_datasets.items():
         location_dataset_map[location_id] = dataset
-        location_centroid_arry = get_centroid_of_location(dataset)
+        location_centroid_arry = get_centroid_of_location(dataset.iloc[:,1:])
+        #print("location_centroid_arry",location_centroid_arry)
+
 
         #Apply Euclidean distance similarity between input location centroid and the other obtained centroid vectors
-        index = min(len(input_location_centroid_arry), len(location_centroid_arry))
-        if len(input_location_centroid_arry) > len(location_centroid_arry):
-            input_location_centroid_arry = input_location_centroid_arry[:index]
-        else:
-            location_centroid_arry = location_centroid_arry[:index]
+        # index = min(len(input_location_centroid_arry), len(location_centroid_arry))
+        # if len(input_location_centroid_arry) > len(location_centroid_arry):
+        #     input_location_centroid_arry = input_location_centroid_arry[:index]
+        # else:
+        #     location_centroid_arry = location_centroid_arry[:index]
 
         similarity_score = get_euclidean_similarity_score(input_location_centroid_arry,location_centroid_arry)
+
+        #print("similarity_score",similarity_score)
 
         image_pairs = []
 
         location_match_data.append((location_id,similarity_score,image_pairs))
         #break
-    #print ("location_match_data",location_match_data)
 
-    sorted(location_match_data,key=itemgetter(1))
+    location_match_data = sorted(location_match_data,key=itemgetter(1))
 
     location_match_data = location_match_data[0:k]
 
@@ -333,7 +344,7 @@ def get_location_model_vectors(location_map):
         for l in location_model_files:
             if location in l:
                 location_dataset = get_location_data(os.path.join(IMAGE_PATH,l))
-                location_centroid_arry = get_centroid_of_location(location_dataset)
+                location_centroid_arry = get_centroid_of_location(location_dataset.iloc[:,1:])
                 location_model_vector_map[reverse_location_map[location]].append(location_centroid_arry)
 
     return location_model_vector_map
@@ -398,7 +409,8 @@ if __name__ == '__main__':
     else:
         k = int(sys.argv[4])
 
-    location_map = get_locations_from_metadata('../data/devset_topics.xml')
+    #location_map = get_locations_from_metadata('../data/devset_topics.xml')
+    location_map = get_locations_from_metadata('../Testdata/devset/devset_topics.xml')
 
     if task_id == 1:
         users = get_entity_data_from_file(USER_TXT_DESCRIPTOR_FILENAME)
