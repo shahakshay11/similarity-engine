@@ -10,8 +10,7 @@ import os
 import pandas as pd
 from sklearn.cluster import KMeans
 from scipy.spatial.distance import euclidean
-import heapq
-
+from decimal import Decimal
 
 WEIGHT_MODEL_MAP = {'TF':0,'DF':1,'TF-IDF':2}
 
@@ -69,7 +68,6 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
 
         #Get the entity id and term_weights list from each entity
         entity_id = entity_obj[:term_index].strip()
-        #print("entity ID",entity_id)
         entity_term_weights_list = entity_obj[entity_obj.find('"'):].split(" ")
 
         if is_location_query:
@@ -77,7 +75,6 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
             for location_id,location_text in location_map.items():
                 if location_text.startswith(entity_id.split(" ")[0]):
                     entity_id = location_id
-                    #print("entity_id",entity_id)
                     break
         
         entity_ids.append(entity_id)
@@ -93,24 +90,15 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
 
         #Construct the term-weight vector for each entity for given weight_model(TF/DF/IDF)
 
-        #print("Terms",terms)
-        #print("weights",weights)
-
-
         selected_weights = []
         i = weight_model_index
         while i < len(weights):
             selected_weights.append(weights[i])
             i = i+3
 
-        #print ("selected_weights",selected_weights)
-
         term_weight_vector = list(map(lambda X: (X[0],X[1]), list(zip(terms,selected_weights))))
 
-        #print("TERM_WEIGHT",term_weight_vector)
-
         entity_term_vector_dict[entity_id] = term_weight_vector
-        #break
 
     return entity_term_vector_dict
 
@@ -118,25 +106,26 @@ def get_cosine_similarity_score(vector_1,vector_2):
     """
     Return the cosine similarity score for the 2 vectors
     """
-    vector_1_weights = [t[1] for t in vector_1]
-    vector_2_weights = [t[1] for t in vector_2]
+
+    vector_1_weights = [float(v1) for v1 in vector_1.values()]
+    vector_2_weights = [float(v2) for v2 in vector_2.values()]
 
     vector_1_weights = np.array(vector_1_weights).reshape(1,-1)
     vector_2_weights = np.array(vector_2_weights).reshape(1,-1)
 
-    return 1 - cosine_similarity(np.array(vector_1_weights),np.array(vector_2_weights)).item()
+    return cosine_similarity(np.array(vector_1_weights),np.array(vector_2_weights)).item()
 
 def get_vector_norm(vector):
-    #vector_norm =  math.sqrt(sum(map(lambda x:x*x,vector)))
     return np.linalg.norm(vector)
 
 def get_normalized_term_vector(term_vector):
-    term_weights = [t[1] for t in term_vector]
+
+    term_weights = [v for v in term_vector.values()]
 
     norm = get_vector_norm(term_weights)
 
     if norm:
-        normalized_term_vector = [(a[0],a[1]/norm) for a in term_vector]
+        normalized_term_vector = {k1:(v1/norm) for k1,v1 in term_vector.items()}
     else:
         normalized_term_vector = term_vector
 
@@ -152,23 +141,39 @@ def updated_term_vector(input_vector,reference_vector):
     dict1 = dict(input_vector)
     dict2 = dict(reference_vector)
 
-    updated_entity_term_vector = []
+    updated_entity_term_vector = {}
     for k,v in dict2.items():
         if k in dict1:
-            updated_entity_term_vector.append((k,v))
+            updated_entity_term_vector[k] = v
 
-    dict3 = dict(updated_entity_term_vector)
     for k in dict1.keys():
-        if k not in dict3:
-            updated_entity_term_vector.append((k,0))
+        if k not in updated_entity_term_vector:
+            updated_entity_term_vector[k] = 0
+
+    #This is done so that if there is no match at all between the terms in both the vectors
+    if len(updated_entity_term_vector) == 0:
+        updated_entity_term_vector = {k:0 for k in dict1.keys()}
+
+    updated_entity_term_vector = {key:value for key,value in sorted(updated_entity_term_vector.items(),key =  lambda x:x[0])}
 
     return updated_entity_term_vector
 
 def get_vector_distances(vector_a,vector_b):
     #Get the absolute difference of scores between 2 vectors
+    pos_inf = Decimal('Infinity')
+
+    maximized_vector_b = {}
+    for k,v in vector_b.items():
+        if v == 0:
+            maximized_vector_b[k] = pos_inf
+        else:
+            maximized_vector_b[k] = v
+     
     vector_distances = []
-    for a,b in zip(vector_a,vector_b):
-        vector_distances.append((a[0],abs(a[1] - b[1])))
+    for (k1,v1),(k2,v2) in zip(vector_a.items(),maximized_vector_b.items()):
+        vector_distances.append((k1,abs(float(v1) - float(maximized_vector_b[k1]))))
+
+    vector_distances = sorted(vector_distances,key=itemgetter(0))
     return vector_distances
 
 def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
@@ -176,18 +181,23 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
 
     given_entity_term_vector = entity_term_vector_dict[given_entity_id]
 
-    normalized_given_entity_term_vector = get_normalized_term_vector(given_entity_term_vector)
+    ordered_given_entity_term_vector = dict(given_entity_term_vector)
+
+    ordered_given_entity_term_vector = {k: v for k,v in sorted(ordered_given_entity_term_vector.items(), key=lambda x:x[0])}
+
+    normalized_given_entity_term_vector = get_normalized_term_vector(ordered_given_entity_term_vector)
 
     for entity_id,entity_term_vector in entity_term_vector_dict.items():
         if entity_id == given_entity_id:
             continue
 
-        updated_entity_term_vector = updated_term_vector(given_entity_term_vector,entity_term_vector)
-        similarity_score = get_cosine_similarity_score(given_entity_term_vector,updated_entity_term_vector)
+        updated_entity_term_vector = updated_term_vector(given_entity_term_vector,entity_term_vector,entity_id=entity_id)
+
+        similarity_score = get_cosine_similarity_score(ordered_given_entity_term_vector,updated_entity_term_vector,entity_id=entity_id)
 
         normalized_entity_term_vector = get_normalized_term_vector(updated_entity_term_vector)
 
-        term_value_differences = get_vector_distances(normalized_given_entity_term_vector,normalized_entity_term_vector)
+        term_value_differences = get_vector_distances(ordered_given_entity_term_vector,updated_entity_term_vector,entity_id=entity_id)
         term_value_differences = sorted(term_value_differences,key=itemgetter(1))
 
         if len(term_value_differences) > 3:
@@ -197,7 +207,7 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
 
         entity_match_data.append((entity_id,similarity_score,highest_contributors))
 
-    entity_match_data = sorted(entity_match_data,key=itemgetter(1))
+    entity_match_data = sorted(entity_match_data,key=itemgetter(1),reverse = True)
 
     return entity_match_data[0:k]
 
@@ -241,7 +251,9 @@ def get_euclidean_similarity_score(vector_a,vector_b):
     else:
         vector_b = vector_b[:x]
 
-    return euclidean(vector_a,vector_b)
+    return (1/(1+euclidean(vector_a,vector_b)))
+
+    #return euclidean(vector_a,vector_b)
 
 def get_similar_image_pairs(location1_id,location2_id,location_1_dataset,location_2_dataset,model):
     '''
@@ -292,26 +304,21 @@ def get_similar_locations_given_model(location_datasets,input_location_dataset,i
     for location_id,dataset in location_datasets.items():
         location_dataset_map[location_id] = dataset
         location_centroid_arry = get_centroid_of_location(dataset.iloc[:,1:])
-        #print("location_centroid_arry",location_centroid_arry)
-
 
         #Apply Euclidean distance similarity between input location centroid and the other obtained centroid vectors
-        # index = min(len(input_location_centroid_arry), len(location_centroid_arry))
-        # if len(input_location_centroid_arry) > len(location_centroid_arry):
-        #     input_location_centroid_arry = input_location_centroid_arry[:index]
-        # else:
-        #     location_centroid_arry = location_centroid_arry[:index]
 
         similarity_score = get_euclidean_similarity_score(input_location_centroid_arry,location_centroid_arry)
 
-        #print("similarity_score",similarity_score)
+        #similarity_score = 1/(1+similarity_score)
+
+        print("similarity_score",similarity_score)
 
         image_pairs = []
 
         location_match_data.append((location_id,similarity_score,image_pairs))
         #break
 
-    location_match_data = sorted(location_match_data,key=itemgetter(1))
+    location_match_data = sorted(location_match_data,key=itemgetter(1),reverse=True)
 
     location_match_data = location_match_data[0:k]
 
@@ -384,9 +391,6 @@ def get_top_k_similar_locations(input_location_id,location_model_vector_map,k):
         location_similarity_score_map[l1_l2_id] = get_vector_norm(sim_scores)
 
     location_similarities = sorted(location_similarity_score_map.items(),key = lambda kv:kv[1])
-
-    # only_similarities = [x[1] for x in location_similarities]
-    # print("Min similarity",min(only_similarities))
 
     k_most_similar_location_similarities = location_similarities[0:k]
     '''
