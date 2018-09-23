@@ -98,7 +98,10 @@ def get_entity_term_vector_map(entity_list,weight_model_index,is_location_query=
 
         term_weight_vector = list(map(lambda X: (X[0],X[1]), list(zip(terms,selected_weights))))
 
-        entity_term_vector_dict[entity_id] = term_weight_vector
+        if entity_id in entity_term_vector_dict:
+            entity_term_vector_dict[entity_id] += term_weight_vector
+        else:
+            entity_term_vector_dict[entity_id] = term_weight_vector
 
     return entity_term_vector_dict
 
@@ -208,8 +211,6 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
         entity_match_data.append((entity_id,similarity_score,highest_contributors))
 
     entity_match_data = sorted(entity_match_data,key=itemgetter(1),reverse = True)
-
-    print("entity_match_data",entity_match_data)
 
     return entity_match_data[0:k]
 
@@ -420,7 +421,6 @@ if __name__ == '__main__':
         users = get_entity_data_from_file(USER_TXT_DESCRIPTOR_FILENAME)
         user_match_data = get_entity_match_data(get_entity_term_vector_map(users,WEIGHT_MODEL_MAP[model]),entity_id,k)
         print("Top k similar users based on textual descriptors")
-        print (user_match_data)
     if task_id == 2:
         images = get_entity_data_from_file(IMAGE_TXT_DESCRIPTOR_FILENAME)
         image_match_data = get_entity_match_data(get_entity_term_vector_map(images,WEIGHT_MODEL_MAP[model]),entity_id,k)
