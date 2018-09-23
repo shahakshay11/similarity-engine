@@ -191,13 +191,13 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
         if entity_id == given_entity_id:
             continue
 
-        updated_entity_term_vector = updated_term_vector(given_entity_term_vector,entity_term_vector,entity_id=entity_id)
+        updated_entity_term_vector = updated_term_vector(given_entity_term_vector,entity_term_vector)
 
-        similarity_score = get_cosine_similarity_score(ordered_given_entity_term_vector,updated_entity_term_vector,entity_id=entity_id)
+        similarity_score = get_cosine_similarity_score(ordered_given_entity_term_vector,updated_entity_term_vector)
 
         normalized_entity_term_vector = get_normalized_term_vector(updated_entity_term_vector)
 
-        term_value_differences = get_vector_distances(ordered_given_entity_term_vector,updated_entity_term_vector,entity_id=entity_id)
+        term_value_differences = get_vector_distances(ordered_given_entity_term_vector,updated_entity_term_vector)
         term_value_differences = sorted(term_value_differences,key=itemgetter(1))
 
         if len(term_value_differences) > 3:
@@ -208,6 +208,8 @@ def get_entity_match_data(entity_term_vector_dict,given_entity_id,k):
         entity_match_data.append((entity_id,similarity_score,highest_contributors))
 
     entity_match_data = sorted(entity_match_data,key=itemgetter(1),reverse = True)
+
+    print("entity_match_data",entity_match_data)
 
     return entity_match_data[0:k]
 
@@ -251,7 +253,7 @@ def get_euclidean_similarity_score(vector_a,vector_b):
     else:
         vector_b = vector_b[:x]
 
-    return (1/(1+euclidean(vector_a,vector_b)))
+    return (1/(1+1.0*euclidean(vector_a,vector_b)))
 
     #return euclidean(vector_a,vector_b)
 
@@ -281,7 +283,7 @@ def get_similar_image_pairs(location1_id,location2_id,location_1_dataset,locatio
             img_to_img_score_map[(i,j)] = get_euclidean_similarity_score(location_image_vector_map[location1_id][i],location_image_vector_map[location2_id][j])
 
     #sort the obtained image to image score vector in desc order
-    img_to_img_score_vector = sorted(img_to_img_score_map.items(),key = lambda kv:kv[1])
+    img_to_img_score_vector = sorted(img_to_img_score_map.items(),key = lambda kv:kv[1],reverse=True)
 
     image_pairs = [x[0] for x in img_to_img_score_vector[0:3]]
 
@@ -310,8 +312,6 @@ def get_similar_locations_given_model(location_datasets,input_location_dataset,i
         similarity_score = get_euclidean_similarity_score(input_location_centroid_arry,location_centroid_arry)
 
         #similarity_score = 1/(1+similarity_score)
-
-        print("similarity_score",similarity_score)
 
         image_pairs = []
 
@@ -390,7 +390,7 @@ def get_top_k_similar_locations(input_location_id,location_model_vector_map,k):
     for l1_l2_id,sim_scores in location_similarity_vector_map.items():
         location_similarity_score_map[l1_l2_id] = get_vector_norm(sim_scores)
 
-    location_similarities = sorted(location_similarity_score_map.items(),key = lambda kv:kv[1])
+    location_similarities = sorted(location_similarity_score_map.items(),key = lambda kv:kv[1],reverse=True)
 
     k_most_similar_location_similarities = location_similarities[0:k]
     '''
